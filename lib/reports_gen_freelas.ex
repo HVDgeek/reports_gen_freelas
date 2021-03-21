@@ -58,11 +58,7 @@ defmodule ReportsGenFreelas do
 
     hours_per_year = Map.put(hours_per_year, name, year_hour)
 
-    %{
-      "all_hours" => all_hours,
-      "hours_per_month" => hours_per_month,
-      "hours_per_year" => hours_per_year
-    }
+    build_report(all_hours, hours_per_month, hours_per_year)
   end
 
   defp get_month_name(month) do
@@ -83,10 +79,61 @@ defmodule ReportsGenFreelas do
     hours_per_month = Enum.into(@available_users, %{}, &{&1, initialize_months()})
     hours_per_year = Enum.into(@available_users, %{}, &{&1, initialize_years()})
 
-    %{
+    build_report(all_hours, hours_per_month, hours_per_year)
+  end
+
+  def build_from_many() do
+    {:error, "Filenames is not provided"}
+  end
+
+  def build_from_many(filenames) when not is_list(filenames) do
+    {:error, "Please provide list of strings"}
+  end
+
+  def build_from_many(filenames) do
+    result =
+      filenames
+      |> Task.async_stream(&build/1)
+      |> Enum.reduce(initialize_acc(), fn {:ok, result}, report -> sum_reports(report, result) end)
+
+    {:ok, result}
+  end
+
+  defp sum_reports(
+         %{
+           "all_hours" => all_hours,
+           "hours_per_month" => hours_per_month,
+           "hours_per_year" => hours_per_year
+         },
+         %{
+           "all_hours" => all_hours2,
+           "hours_per_month" => hours_per_month2,
+           "hours_per_year" => hours_per_year2
+         }
+       ) do
+    all_hours = merge_maps(all_hours, all_hours2)
+
+    hours_per_month =
+      Map.merge(hours_per_month, hours_per_month2, fn _key, value1, value2 ->
+        merge_maps(value1, value2)
+      end)
+
+    hours_per_year =
+      Map.merge(hours_per_year, hours_per_year2, fn _key, value1, value2 ->
+        merge_maps(value1, value2)
+      end)
+
+    build_report(all_hours, hours_per_month, hours_per_year)
+  end
+
+  defp merge_maps(map1, map2) do
+    Map.merge(map1, map2, fn _key, value1, value2 -> value1 + value2 end)
+  end
+
+  defp build_report(all_hours, hours_per_month, hours_per_year),
+    do: %{
       "all_hours" => all_hours,
       "hours_per_month" => hours_per_month,
       "hours_per_year" => hours_per_year
     }
-  end
 end
